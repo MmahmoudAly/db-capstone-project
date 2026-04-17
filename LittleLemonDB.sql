@@ -212,7 +212,7 @@ CREATE TABLE `Orders` (
 
 LOCK TABLES `Orders` WRITE;
 /*!40000 ALTER TABLE `Orders` DISABLE KEYS */;
-INSERT INTO `Orders` VALUES (1,'2020-06-15',2,188,1,2,1,1),(2,'2020-08-25',1,353,2,1,2,3),(3,'2021-08-17',3,113,3,3,4,4),(4,'2021-03-21',1,252,5,1,5,2),(5,'2022-07-16',2,252,4,3,3,5);
+INSERT INTO `Orders` VALUES (1,'2020-06-15',2,188,1,2,1,1),(2,'2020-08-25',1,353,2,1,2,3),(3,'2021-08-17',3,113,3,3,4,4),(4,'2021-03-21',1,252,5,1,5,2),(5,'2022-07-16',5,252,4,3,3,5);
 /*!40000 ALTER TABLE `Orders` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -322,10 +322,10 @@ SET character_set_client = @saved_cs_client;
 DELIMITER ;;
 CREATE DEFINER=`root`@`localhost` PROCEDURE `AddBooking`(IN BkID INT, IN CustID INT, IN TblNum INT, IN BkDate DATE)
 BEGIN
-	INSERT INTO Bookings (BookingID, CustomerID, TableNo, BookingDate)
-	VALUES (BkID, CustID, TblNum, BkDate);
-	
-	SELECT 'New Booking Added' AS Confirmation;
+    INSERT INTO Bookings (BookingID, CustomerID, TableNo, BookingDate)
+    VALUES (BkID, CustID, TblNum, BkDate);
+    
+    SELECT CONCAT('Booking ', BkID, ' successfully added.') AS Status;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -346,7 +346,7 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `AddValidBooking`(IN BkDate DATE, IN
 BEGIN
 	START TRANSACTION;
 	INSERT INTO Bookings (BookingDate, TableNo) 
-	VALUES (BkDate , TblNum);
+	VALUES (BkDate, TblNum);
 	
 	SET @BookingCount = 0;
 	SELECT COUNT(*) INTO @BookingCount 
@@ -375,11 +375,11 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE DEFINER=`root`@`localhost` PROCEDURE `CancelBooking`(IN BkID INT)
+CREATE DEFINER=`root`@`localhost` PROCEDURE `CancelBooking`(IN TblNum INT)
 BEGIN
 	DELETE FROM Bookings
-	WHERE BookingID = BkID;
-	SELECT CONCAT('Booking ', BkID , ' Canceled') AS Conirmation;
+	WHERE TableNo = TblNum;
+	SELECT CONCAT('Table Number ', TblNum , ' Canceled') AS Confirmation;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -457,6 +457,43 @@ DELIMITER ;
 /*!50003 SET character_set_client  = @saved_cs_client */ ;
 /*!50003 SET character_set_results = @saved_cs_results */ ;
 /*!50003 SET collation_connection  = @saved_col_connection */ ;
+/*!50003 DROP PROCEDURE IF EXISTS `ManageBooking` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `ManageBooking`(IN BkID INT, IN BkDate DATE, IN TblNum INT, IN CustID INT)
+BEGIN
+        -- Handler for duplicate BookingID (error code 1062) To ensure we catch the specific error of duplicate primary key and
+        -- provide a clear message to the user without crashing the application.
+        DECLARE EXIT HANDLER FOR 1062
+        BEGIN
+            SELECT CONCAT('Failure: Booking ID ', BkID, ' already exists.') AS BookingStatus;
+            ROLLBACK;
+        END;
+
+        START TRANSACTION;
+        INSERT INTO Bookings (BookingID, BookingDate, TableNo, CustomerID)
+        VALUES (BkID, BkDate, TblNum, CustID);
+
+        IF (SELECT COUNT(*) FROM Bookings WHERE BookingDate = BkDate AND TableNo = TblNum) > 1 THEN
+            SELECT CONCAT('Failure: Table ', TblNum, ' is already reserved for ', BkDate) AS BookingStatus;
+            ROLLBACK;
+        ELSE
+            SELECT CONCAT('Success: Table ', TblNum, ' reserved successfully.') AS BookingStatus;
+            COMMIT;
+        END IF;
+    END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 /*!50003 DROP PROCEDURE IF EXISTS `UpdateBooking` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -467,12 +504,12 @@ DELIMITER ;
 /*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
 /*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
 DELIMITER ;;
-CREATE DEFINER=`root`@`localhost` PROCEDURE `UpdateBooking`(IN BKID INT, IN BkDate DATE)
+CREATE DEFINER=`root`@`localhost` PROCEDURE `UpdateBooking`(IN TblNum INT, IN BkDate DATE)
 BEGIN
 	UPDATE Bookings 
 	SET BookingDate = BkDate 
-	WHERE BookingID = BkID;
-	SELECT CONCAT('Booking ' , BkID , ' Updated') AS Confirmation;
+	WHERE TableNo = TblNum;
+	SELECT CONCAT('Table ' , TblNum , ' has been updated to ', BkDate ) AS Confirmation;
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -561,4 +598,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-13  6:18:22
+-- Dump completed on 2026-04-18  0:24:12
